@@ -16,6 +16,8 @@ from __future__ import annotations
 
 __version__: str = "0.1.0"
 
+from agent_sense.convenience import ChatUI, Confidence
+
 # ---------------------------------------------------------------------------
 # Confidence
 # ---------------------------------------------------------------------------
@@ -123,6 +125,8 @@ from agent_sense.indicators.renderers import (
 
 __all__ = [
     "__version__",
+    "ChatUI",
+    "Confidence",
     # Confidence
     "AnnotatedResponse",
     "ConfidenceAnnotator",

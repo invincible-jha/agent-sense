@@ -52,6 +52,11 @@ class AnnotatedResponse:
     domain: str = ""
     metadata: dict[str, str] = field(default_factory=dict)
 
+    @property
+    def score(self) -> float:
+        """Alias for ``confidence_score``."""
+        return self.confidence_score
+
     def is_high_confidence(self) -> bool:
         """Return True if level is HIGH."""
         return self.confidence_level == ConfidenceLevel.HIGH

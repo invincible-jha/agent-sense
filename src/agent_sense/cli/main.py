@@ -401,5 +401,226 @@ def transparency_report_command(
         console.print(summary)
 
 
+# ---------------------------------------------------------------------------
+# sense indicators
+# ---------------------------------------------------------------------------
+
+
+@cli.group(name="indicators")
+def indicators_group() -> None:
+    """Render universal AI transparency indicators.
+
+    Sub-commands produce confidence indicators, AI disclosure cards, and
+    handoff signals in HTML, TEXT, JSON, or MARKDOWN format.
+    """
+
+
+@indicators_group.command(name="confidence")
+@click.option("--score", "-s", type=float, required=True, help="Score in [0.0, 1.0].")
+@click.option("--reasoning", "-r", default="", show_default=True, help="Reasoning text.")
+@click.option(
+    "--format",
+    "-f",
+    "render_format",
+    type=click.Choice(["html", "text", "json", "markdown"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
+def indicators_confidence_command(
+    score: float,
+    reasoning: str,
+    render_format: str,
+) -> None:
+    """Render a confidence indicator.
+
+    Example::
+
+        agent-sense indicators confidence --score 0.85 --reasoning "high match" --format text
+    """
+    from agent_sense.indicators.confidence import from_score
+    from agent_sense.indicators.renderers import IndicatorRenderer, RenderFormat
+
+    format_map = {
+        "html": RenderFormat.HTML,
+        "text": RenderFormat.TEXT,
+        "json": RenderFormat.JSON,
+        "markdown": RenderFormat.MARKDOWN,
+    }
+    try:
+        indicator = from_score(score, reasoning=reasoning)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+
+    renderer = IndicatorRenderer()
+    output = renderer.render_confidence(indicator, format_map[render_format.lower()])
+    console.print(output)
+
+
+@indicators_group.command(name="disclosure")
+@click.option("--agent-name", "agent_name", required=True, help="Agent display name.")
+@click.option("--model", "model_provider", required=True, help="Model provider name.")
+@click.option("--model-name", "model_name", default="", help="Model identifier.")
+@click.option("--version", "agent_version", default="1.0.0", show_default=True)
+@click.option(
+    "--capability",
+    "capabilities",
+    multiple=True,
+    help="Agent capability (repeat for multiple).",
+)
+@click.option(
+    "--limitation",
+    "limitations",
+    multiple=True,
+    help="Agent limitation (repeat for multiple).",
+)
+@click.option("--data-handling", "data_handling", default="", help="Data handling description.")
+@click.option(
+    "--level",
+    "disclosure_level",
+    type=click.Choice(["minimal", "standard", "detailed", "full"], case_sensitive=False),
+    default="standard",
+    show_default=True,
+    help="Disclosure verbosity level.",
+)
+@click.option(
+    "--format",
+    "-f",
+    "render_format",
+    type=click.Choice(["html", "text", "json", "markdown"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
+def indicators_disclosure_command(
+    agent_name: str,
+    model_provider: str,
+    model_name: str,
+    agent_version: str,
+    capabilities: tuple[str, ...],
+    limitations: tuple[str, ...],
+    data_handling: str,
+    disclosure_level: str,
+    render_format: str,
+) -> None:
+    """Render an AI disclosure card.
+
+    Example::
+
+        agent-sense indicators disclosure --agent-name Aria --model Anthropic --format markdown
+    """
+    from agent_sense.indicators.disclosure import DisclosureLevel, build_disclosure
+    from agent_sense.indicators.renderers import IndicatorRenderer, RenderFormat
+
+    level_map = {
+        "minimal": DisclosureLevel.MINIMAL,
+        "standard": DisclosureLevel.STANDARD,
+        "detailed": DisclosureLevel.DETAILED,
+        "full": DisclosureLevel.FULL,
+    }
+    format_map = {
+        "html": RenderFormat.HTML,
+        "text": RenderFormat.TEXT,
+        "json": RenderFormat.JSON,
+        "markdown": RenderFormat.MARKDOWN,
+    }
+
+    try:
+        card = build_disclosure(
+            agent_name=agent_name,
+            model_provider=model_provider,
+            model_name=model_name,
+            agent_version=agent_version,
+            capabilities=list(capabilities),
+            limitations=list(limitations),
+            data_handling=data_handling,
+            disclosure_level=level_map[disclosure_level.lower()],
+        )
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+
+    renderer = IndicatorRenderer()
+    output = renderer.render_disclosure(card, format_map[render_format.lower()])
+    console.print(output)
+
+
+@indicators_group.command(name="handoff")
+@click.option(
+    "--reason",
+    "-r",
+    type=click.Choice(
+        [
+            "confidence_too_low",
+            "out_of_scope",
+            "user_request",
+            "safety_concern",
+            "complexity_exceeded",
+            "requires_human_judgment",
+        ],
+        case_sensitive=False,
+    ),
+    required=True,
+    help="Reason for the handoff.",
+)
+@click.option("--confidence", "-c", "confidence_score", type=float, default=0.5, show_default=True)
+@click.option("--specialist", default="human agent", show_default=True)
+@click.option("--context", "context_summary", default="", help="Context summary.")
+@click.option(
+    "--format",
+    "-f",
+    "render_format",
+    type=click.Choice(["html", "text", "json", "markdown"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
+def indicators_handoff_command(
+    reason: str,
+    confidence_score: float,
+    specialist: str,
+    context_summary: str,
+    render_format: str,
+) -> None:
+    """Render a handoff signal.
+
+    Example::
+
+        agent-sense indicators handoff --reason safety_concern --confidence 0.1 --format json
+    """
+    import datetime
+
+    from agent_sense.indicators.confidence import from_score
+    from agent_sense.indicators.handoff_signal import HandoffReason, HandoffSignal
+    from agent_sense.indicators.renderers import IndicatorRenderer, RenderFormat
+
+    reason_map = {r.value: r for r in HandoffReason}
+    format_map = {
+        "html": RenderFormat.HTML,
+        "text": RenderFormat.TEXT,
+        "json": RenderFormat.JSON,
+        "markdown": RenderFormat.MARKDOWN,
+    }
+
+    try:
+        confidence = from_score(confidence_score, reasoning="score provided via CLI")
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+
+    signal = HandoffSignal(
+        reason=reason_map[reason.lower()],
+        confidence=confidence,
+        suggested_specialist=specialist,
+        context_summary=context_summary,
+        timestamp=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+    renderer = IndicatorRenderer()
+    output = renderer.render_handoff(signal, format_map[render_format.lower()])
+    console.print(output)
+
+
 if __name__ == "__main__":
     cli()

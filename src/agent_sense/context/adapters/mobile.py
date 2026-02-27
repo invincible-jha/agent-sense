@@ -32,7 +32,7 @@ _ANDROID_PATTERN: re.Pattern[str] = re.compile(
     r"(?i)Android ([\d.]+)"
 )
 _APP_VERSION_PATTERN: re.Pattern[str] = re.compile(
-    r"(?i)AgentSense/([\d.]+)"
+    r"(?i)agent-sense/([\d.]+)"
 )
 
 
@@ -77,7 +77,7 @@ class MobileContextAdapter:
     Example
     -------
     >>> adapter = MobileContextAdapter(
-    ...     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0) AgentSense/1.2.0",
+    ...     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0) agent-sense/1.2.0",
     ...     headers={"X-Battery-Low": "true"},
     ... )
     >>> ctx, info = adapter.extract()

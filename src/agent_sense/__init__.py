@@ -99,6 +99,28 @@ from agent_sense.middleware.sense_middleware import InteractionResult, SenseMidd
 # ---------------------------------------------------------------------------
 from agent_sense.plugins.registry import PluginRegistry
 
+# ---------------------------------------------------------------------------
+# Indicators  (Phase 6E — universal AI transparency)
+# ---------------------------------------------------------------------------
+from agent_sense.indicators.confidence import (
+    ConfidenceIndicator,
+    ConfidenceLevel as IndicatorConfidenceLevel,
+    from_score,
+)
+from agent_sense.indicators.disclosure import (
+    AIDisclosureCard,
+    DisclosureLevel,
+    build_disclosure,
+)
+from agent_sense.indicators.handoff_signal import (
+    HandoffReason,
+    HandoffSignal,
+)
+from agent_sense.indicators.renderers import (
+    IndicatorRenderer,
+    RenderFormat,
+)
+
 __all__ = [
     "__version__",
     # Confidence
@@ -158,4 +180,15 @@ __all__ = [
     "InteractionResult",
     # Plugins
     "PluginRegistry",
+    # Indicators
+    "ConfidenceIndicator",
+    "IndicatorConfidenceLevel",
+    "from_score",
+    "AIDisclosureCard",
+    "DisclosureLevel",
+    "build_disclosure",
+    "HandoffReason",
+    "HandoffSignal",
+    "IndicatorRenderer",
+    "RenderFormat",
 ]

@@ -319,16 +319,3 @@ export function createAgentSenseClient(
   };
 }
 
-/** Re-export config type for convenience. */
-export type {
-  AccessibilityCheckResult,
-  AccessibilityConfig,
-  DetectedContext,
-  DialogueState,
-  FeedbackEntry,
-  FeedbackSubmitRequest,
-  FeedbackSummary,
-  ResponseCandidate,
-  TransparencyIndicator,
-  UserIntent,
-};

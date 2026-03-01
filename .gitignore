@@ -68,3 +68,7 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+node_modules/
+react/node_modules/
+react/dist/
+react/coverage/

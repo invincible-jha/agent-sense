@@ -21,6 +21,14 @@ Part of the [AumOS](https://github.com/aumos-ai) open-source agent infrastructur
 - Suggestion engine ranks follow-up prompts and clarifying questions by relevance to the current conversation turn
 - Channel adapters for web, mobile, and voice normalize input and format output appropriately for each surface
 
+## Current Limitations
+
+> **Transparency note**: We list known limitations to help you evaluate fit.
+
+- **Frontend**: Backend Python only — React component library not yet shipped.
+- **Languages**: English-only AI disclosure text.
+- **Streaming**: No streaming confidence updates.
+
 ## Quick Start
 
 Install from PyPI:

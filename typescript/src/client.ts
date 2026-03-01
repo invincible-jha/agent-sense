@@ -1,8 +1,12 @@
 /**
  * HTTP client for the agent-sense transparency API.
  *
- * Uses the Fetch API (available natively in Node 18+, browsers, and Deno).
- * No external dependencies required.
+ * Delegates all HTTP transport to `@aumos/sdk-core` which provides
+ * automatic retry with exponential back-off, timeout management via
+ * `AbortSignal.timeout`, interceptor support, and a typed error hierarchy.
+ *
+ * The public-facing `ApiResult<T>` envelope is preserved for full
+ * backward compatibility with existing callers.
  *
  * @example
  * ```ts
@@ -21,10 +25,18 @@
  * ```
  */
 
+import {
+  createHttpClient,
+  HttpError,
+  NetworkError,
+  TimeoutError,
+  AumosError,
+  type HttpClient,
+} from "@aumos/sdk-core";
+
 import type {
   AccessibilityCheckResult,
   AccessibilityConfig,
-  ApiError,
   ApiResult,
   DetectedContext,
   DialogueState,
@@ -51,55 +63,51 @@ export interface AgentSenseClientConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Internal adapter
 // ---------------------------------------------------------------------------
 
-async function fetchJson<T>(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
+async function callApi<T>(
+  operation: () => Promise<{ readonly data: T; readonly status: number }>,
 ): Promise<ApiResult<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    const body = await response.json() as unknown;
-
-    if (!response.ok) {
-      const errorBody = body as Partial<ApiError>;
+    const response = await operation();
+    return { ok: true, data: response.data };
+  } catch (error: unknown) {
+    if (error instanceof HttpError) {
       return {
         ok: false,
-        error: {
-          error: errorBody.error ?? "Unknown error",
-          detail: errorBody.detail ?? "",
-        },
-        status: response.status,
+        error: { error: error.message, detail: String(error.body ?? "") },
+        status: error.statusCode,
       };
     }
-
-    return { ok: true, data: body as T };
-  } catch (err: unknown) {
-    clearTimeout(timeoutId);
-    const message = err instanceof Error ? err.message : String(err);
+    if (error instanceof TimeoutError) {
+      return {
+        ok: false,
+        error: { error: "Request timed out", detail: error.message },
+        status: 0,
+      };
+    }
+    if (error instanceof NetworkError) {
+      return {
+        ok: false,
+        error: { error: "Network error", detail: error.message },
+        status: 0,
+      };
+    }
+    if (error instanceof AumosError) {
+      return {
+        ok: false,
+        error: { error: error.code, detail: error.message },
+        status: error.statusCode ?? 0,
+      };
+    }
+    const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      error: { error: "Network error", detail: message },
+      error: { error: "Unexpected error", detail: message },
       status: 0,
     };
   }
-}
-
-function buildHeaders(
-  extraHeaders: Readonly<Record<string, string>> | undefined,
-): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    ...extraHeaders,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -205,117 +213,78 @@ export interface AgentSenseClient {
 export function createAgentSenseClient(
   config: AgentSenseClientConfig,
 ): AgentSenseClient {
-  const { baseUrl, timeoutMs = 30_000, headers: extraHeaders } = config;
-  const baseHeaders = buildHeaders(extraHeaders);
+  const http: HttpClient = createHttpClient({
+    baseUrl: config.baseUrl,
+    timeout: config.timeoutMs ?? 30_000,
+    defaultHeaders: config.headers,
+  });
 
   return {
-    async parseIntent(options: {
+    parseIntent(options: {
       utterance: string;
       session_id?: string;
       context?: Readonly<Record<string, unknown>>;
     }): Promise<ApiResult<UserIntent>> {
-      return fetchJson<UserIntent>(
-        `${baseUrl}/sense/intent`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(options),
-        },
-        timeoutMs,
-      );
+      return callApi(() => http.post<UserIntent>("/sense/intent", options));
     },
 
-    async rankResponses(options: {
+    rankResponses(options: {
       candidates: readonly { candidate_id: string; text: string; relevance_score: number }[];
       user_text: string;
       history?: readonly string[];
       recent_shown?: readonly string[];
     }): Promise<ApiResult<readonly ResponseCandidate[]>> {
-      return fetchJson<readonly ResponseCandidate[]>(
-        `${baseUrl}/sense/rank`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(options),
-        },
-        timeoutMs,
+      return callApi(() =>
+        http.post<readonly ResponseCandidate[]>("/sense/rank", options),
       );
     },
 
-    async collectFeedback(
-      request: FeedbackSubmitRequest,
-    ): Promise<ApiResult<FeedbackEntry>> {
-      return fetchJson<FeedbackEntry>(
-        `${baseUrl}/sense/feedback`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(request),
-        },
-        timeoutMs,
+    collectFeedback(request: FeedbackSubmitRequest): Promise<ApiResult<FeedbackEntry>> {
+      return callApi(() => http.post<FeedbackEntry>("/sense/feedback", request));
+    },
+
+    getDialogueState(sessionId: string): Promise<ApiResult<DialogueState>> {
+      return callApi(() =>
+        http.get<DialogueState>(
+          `/sense/sessions/${encodeURIComponent(sessionId)}/state`,
+        ),
       );
     },
 
-    async getDialogueState(sessionId: string): Promise<ApiResult<DialogueState>> {
-      return fetchJson<DialogueState>(
-        `${baseUrl}/sense/sessions/${encodeURIComponent(sessionId)}/state`,
-        { method: "GET", headers: baseHeaders },
-        timeoutMs,
-      );
-    },
-
-    async checkAccessibility(
+    checkAccessibility(
       config: AccessibilityConfig,
     ): Promise<ApiResult<AccessibilityCheckResult>> {
-      return fetchJson<AccessibilityCheckResult>(
-        `${baseUrl}/sense/accessibility/check`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(config),
-        },
-        timeoutMs,
+      return callApi(() =>
+        http.post<AccessibilityCheckResult>("/sense/accessibility/check", config),
       );
     },
 
-    async getTransparencyIndicator(options: {
+    getTransparencyIndicator(options: {
       agent_id: string;
       session_id?: string;
     }): Promise<ApiResult<TransparencyIndicator>> {
-      const params = new URLSearchParams();
-      params.set("agent_id", options.agent_id);
-      if (options.session_id !== undefined) {
-        params.set("session_id", options.session_id);
-      }
-      return fetchJson<TransparencyIndicator>(
-        `${baseUrl}/sense/transparency?${params.toString()}`,
-        { method: "GET", headers: baseHeaders },
-        timeoutMs,
+      const queryParams: Record<string, string> = { agent_id: options.agent_id };
+      if (options.session_id !== undefined) queryParams["session_id"] = options.session_id;
+      return callApi(() =>
+        http.get<TransparencyIndicator>("/sense/transparency", { queryParams }),
       );
     },
 
-    async detectContext(options: {
+    detectContext(options: {
       user_agent: string;
       headers?: Readonly<Record<string, string>>;
     }): Promise<ApiResult<DetectedContext>> {
-      return fetchJson<DetectedContext>(
-        `${baseUrl}/sense/context/detect`,
-        {
-          method: "POST",
-          headers: baseHeaders,
-          body: JSON.stringify(options),
-        },
-        timeoutMs,
+      return callApi(() =>
+        http.post<DetectedContext>("/sense/context/detect", options),
       );
     },
 
-    async getFeedbackSummary(agentId: string): Promise<ApiResult<FeedbackSummary>> {
-      return fetchJson<FeedbackSummary>(
-        `${baseUrl}/sense/feedback/${encodeURIComponent(agentId)}/summary`,
-        { method: "GET", headers: baseHeaders },
-        timeoutMs,
+    getFeedbackSummary(agentId: string): Promise<ApiResult<FeedbackSummary>> {
+      return callApi(() =>
+        http.get<FeedbackSummary>(
+          `/sense/feedback/${encodeURIComponent(agentId)}/summary`,
+        ),
       );
     },
   };
 }
-
